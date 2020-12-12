@@ -10,22 +10,30 @@
 #include "ThreeWire.h"  
 #include "RtcDS1302.h"
 
-#define PN2222A 2
+#define SCLK      5
+#define DATA      7
+#define CE        9
+#define PN2222A   8
 
-ThreeWire myWire(4,5,2); // IO, SCLK, CE
+#define HOUR      10
+#define MIN       0
+#define ON_TIME   60000
+
+ThreeWire myWire(DATA, SCLK, CE); // IO, SCLK, CE
 RtcDS1302<ThreeWire> Rtc(myWire);
 
 void setup () 
 {
-    pinMode(PN2222A, OUTPUT);
     Serial.begin(57600);
 
     Serial.print("compiled: ");
     Serial.print(__DATE__);
     Serial.println(__TIME__);
 
+    pinMode(PN2222A, OUTPUT);
+    digitalWrite(PN2222A, LOW);
+    
     Rtc.Begin();
-
     RtcDateTime compiled = RtcDateTime(__DATE__, __TIME__);
     printDateTime(compiled);
     Serial.println();
@@ -82,9 +90,9 @@ void loop ()
         Serial.println("RTC lost confidence in the DateTime!");
     }
 
-    if (now.Hour() == 10 && now.Minute() == 0){
+    if (now.Hour() == HOUR && now.Minute() == MIN){
       digitalWrite(PN2222A, HIGH);
-    } else {
+      delay(ON_TIME);
       digitalWrite(PN2222A, LOW);
     }
 
