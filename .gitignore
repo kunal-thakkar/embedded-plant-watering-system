@@ -1,0 +1,10 @@
+*.asm
+*.bmk
+*.brk
+*.cp
+*.dct
+*.dlt
+*.dic
+*.hex
+*.vscode
+*.log
