@@ -225,7 +225,7 @@ void main() {
         switch(set_count)
         {
           case 1:
-		      hour = BCD2Binary(hour);
+                      hour = BCD2Binary(hour);
           hour = hour + set;
           hour = Binary2BCD(hour);
           if((hour & 0x1F) >= 0x13) {
@@ -285,6 +285,13 @@ void main() {
       }
     }
     readRTC();
+//    if(hour == 10 && minute == 0) {
+//      PORTA.F3 = 1;
+//      Lcd_out(2,1, "Watering .....");
+//      Delay_ms(60000);
+//      PORTA.F3 = 0;
+//      Lcd_out(2,1, "              ");
+//    }
     setDisplay();
     if(cursor_cmd){
       Lcd_Cmd(cursor_cmd);
