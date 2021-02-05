@@ -1,118 +1,83 @@
+/*
 
-// CONNECTIONS:
-// DS1302 CLK/SCLK --> 5
-// DS1302 DAT/IO --> 4
-// DS1302 RST/CE --> 2
-// DS1302 VCC --> 3.3v - 5v
-// DS1302 GND --> GND
-// PN2222A    --> 3
+  The circuit:
+ * LCD RS pin to digital pin 7
+ * LCD Enable to digital pin 6
+ * LCD D4 pin to digital pin 5
+ * LCD D5 pin to digital pin 4
+ * LCD D6 pin to digital pin 3
+ * LCD D7 pin to digital pin 2
+ * LCD R/W pin to ground
+ * LCD VSS pin to ground
+ * LCD VCC pin to 5V
+ * 10K resistor:
+ * ends to +5V and ground
+ * wiper to LCD VO pin (pin 3)
+*/
 
-#include "ThreeWire.h"  
-#include "RtcDS1302.h"
+#include <LiquidCrystal.h>
+#include <Wire.h>
+#include "RTClib.h"
 
-#define SCLK      5
-#define DATA      7
-#define CE        9
-#define PN2222A   8
+// initialize the library by associating any needed LCD interface pin
+// with the arduino pin number it is connected to
+const int rs = 7, en = 6, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+RTC_DS1307 rtc;
 
-#define HOUR      10
-#define MIN       0
-#define ON_TIME   60000
+char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
-ThreeWire myWire(DATA, SCLK, CE); // IO, SCLK, CE
-RtcDS1302<ThreeWire> Rtc(myWire);
+void setup() {
+  // set up the LCD's number of columns and rows:
+  lcd.begin(16, 2);
+  // Print a message to the LCD.
+  lcd.print("hello, booboo!");
+  
+  Serial.begin(9600);
+  delay(3000); // wait for console opening
 
-void setup () 
-{
-    Serial.begin(57600);
+  if (! rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    while (1);
+  }
 
-    Serial.print("compiled: ");
-    Serial.print(__DATE__);
-    Serial.println(__TIME__);
+  if (!rtc.isrunning()) {
+    Serial.println("RTC lost power, lets set the time!");
+  
+  // Comment out below lines once you set the date & time.
+    // Following line sets the RTC to the date & time this sketch was compiled
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  
+    // Following line sets the RTC with an explicit date & time
+    // for example to set January 27 2017 at 12:56 you would call:
+    // rtc.adjust(DateTime(2017, 1, 27, 12, 56, 0));
+  }
+}
 
-    pinMode(PN2222A, OUTPUT);
-    digitalWrite(PN2222A, LOW);
+void loop() {
+  // set the cursor to column 0, line 1
+  // (note: line 1 is the second row, since counting begins with 0):
+  lcd.setCursor(0, 1);
+  // print the number of seconds since reset:
+  lcd.print(millis() / 1000);
+
+  DateTime now = rtc.now();
     
-    Rtc.Begin();
-    RtcDateTime compiled = RtcDateTime(__DATE__, __TIME__);
-    printDateTime(compiled);
+    Serial.print(now.year(), DEC);
+    Serial.print('/');
+    Serial.print(now.month(), DEC);
+    Serial.print('/');
+    Serial.print(now.day(), DEC);
+    Serial.print(" (");
+    Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);
+    Serial.print(") ");
+    Serial.print(now.hour(), DEC);
+    Serial.print(':');
+    Serial.print(now.minute(), DEC);
+    Serial.print(':');
+    Serial.print(now.second(), DEC);
     Serial.println();
-
-    if (!Rtc.IsDateTimeValid()) 
-    {
-        // Common Causes:
-        //    1) first time you ran and the device wasn't running yet
-        //    2) the battery on the device is low or even missing
-
-        Serial.println("RTC lost confidence in the DateTime!");
-        Rtc.SetDateTime(compiled);
-    }
-
-    if (Rtc.GetIsWriteProtected())
-    {
-        Serial.println("RTC was write protected, enabling writing now");
-        Rtc.SetIsWriteProtected(false);
-    }
-
-    if (!Rtc.GetIsRunning())
-    {
-        Serial.println("RTC was not actively running, starting now");
-        Rtc.SetIsRunning(true);
-    }
-
-    RtcDateTime now = Rtc.GetDateTime();
-    if (now < compiled) 
-    {
-        Serial.println("RTC is older than compile time!  (Updating DateTime)");
-        Rtc.SetDateTime(compiled);
-    }
-    else if (now > compiled) 
-    {
-        Serial.println("RTC is newer than compile time. (this is expected)");
-    }
-    else if (now == compiled) 
-    {
-        Serial.println("RTC is the same as compile time! (not expected but all is fine)");
-    }
-}
-
-void loop () 
-{
-    RtcDateTime now = Rtc.GetDateTime();
-
-    printDateTime(now);
+    
     Serial.println();
-
-    if (!now.IsValid())
-    {
-        // Common Causes:
-        //    1) the battery on the device is low or even missing and the power line was disconnected
-        Serial.println("RTC lost confidence in the DateTime!");
-    }
-
-    if (now.Hour() == HOUR && now.Minute() == MIN){
-      digitalWrite(PN2222A, HIGH);
-      delay(ON_TIME);
-      digitalWrite(PN2222A, LOW);
-    }
-
-    delay(10000);
-}
-
-#define countof(a) (sizeof(a) / sizeof(a[0]))
-
-void printDateTime(const RtcDateTime& dt)
-{
-    char datestring[20];
-
-    snprintf_P(datestring, 
-            countof(datestring),
-            PSTR("%02u/%02u/%04u %02u:%02u:%02u"),
-            dt.Month(),
-            dt.Day(),
-            dt.Year(),
-            dt.Hour(),
-            dt.Minute(),
-            dt.Second() );
-    Serial.print(datestring);
+    delay(1000);
 }
