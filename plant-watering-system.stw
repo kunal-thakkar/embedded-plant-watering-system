@@ -8,5 +8,5 @@ Filename=plant-watering-system.stp
 Dependencies=
 [Options]
 ActiveProject=plant-watering-system
-ActiveConfig=Debug
+ActiveConfig=Release
 AddSortedElements=1
