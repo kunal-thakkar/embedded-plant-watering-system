@@ -22,6 +22,12 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+/* Include core modules */
+#include "stm32fxxx_hal.h"
+/* Include my libraries here */
+#include "defines.h"
+#include "tm_stm32_delay.h"
+#include "tm_stm32_hd44780.h"
 
 /* USER CODE END Includes */
 
@@ -51,7 +57,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_RTC_Init(void);
 /* USER CODE BEGIN PFP */
-
+extern void TM_HD44780_Init(uint8_t cols, uint8_t rows);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -89,7 +95,8 @@ int main(void)
   MX_GPIO_Init();
   MX_RTC_Init();
   /* USER CODE BEGIN 2 */
-
+  TM_HD44780_Init(16, 2);
+  TM_HD44780_Puts(0, 0, "Hello Booboo");
   /* USER CODE END 2 */
 
   /* Infinite loop */

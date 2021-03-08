@@ -29,4 +29,11 @@
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
 	</natures>
+	<linkedResources>
+		<link>
+			<name>00-STM32_LIBRARIES</name>
+			<type>2</type>
+			<location>D:/Kunal/stm32fxxx-hal-libraries/00-STM32_LIBRARIES</location>
+		</link>
+	</linkedResources>
 </projectDescription>
