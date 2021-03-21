@@ -38,31 +38,71 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define MODE_DISPLAY_CLCOK		0x00
+#define MODE_SET_CLOCK			0x01
+#define SET_HOUR				0x00
+#define SET_MINUTE				0x01
+#define SET_SECONDS				0x02
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+#define BTN_PRESSED(GPIOx, GPIO_Pin) ({\
+	uint8_t result = 0;\
+	if(HAL_GPIO_ReadPin(GPIOx, GPIO_Pin) == 0) { \
+		while(HAL_GPIO_ReadPin(GPIOx, GPIO_Pin) == 0);\
+		Delay(100);\
+		result = 1;\
+	}\
+	result;\
+})
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 RTC_HandleTypeDef hrtc;
 
-/* USER CODE BEGIN PV */
+TIM_HandleTypeDef htim14;
 
+/* USER CODE BEGIN PV */
+char cTime[0x09] = {0x20, 0x20, ':', 0x20, 0x20, ':', 0x20, 0x20, '\0'};
+RTC_TimeTypeDef tTime = {0};
+RTC_TimeTypeDef sTime = {0};
+RTC_DateTypeDef sDate = {0};
+uint8_t mode = 0;
+uint8_t subMode = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_RTC_Init(void);
+static void MX_TIM14_Init(void);
 /* USER CODE BEGIN PFP */
 extern void TM_HD44780_Init(uint8_t cols, uint8_t rows);
+void DisplayTime(RTC_TimeTypeDef sTime);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+	if(htim->Instance == TIM14) {
+		if (HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK ||
+				HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN) != HAL_OK)
+		{
+			Error_Handler();
+		}
+		DisplayTime(sTime);
+	}
+}
+void DisplayTime(RTC_TimeTypeDef sTime) {
+	cTime[0] = (((sTime.Hours / 10) % 10) + 0x30);
+	cTime[1] = ((sTime.Hours % 10) + 0x30);
+	cTime[3] = (((sTime.Minutes / 10) % 10) + 0x30);
+	cTime[4] = ((sTime.Minutes % 10) + 0x30);
+	cTime[6] = (((sTime.Seconds / 10) % 10) + 0x30);
+	cTime[7] = ((sTime.Seconds % 10) + 0x30);
+	TM_HD44780_Puts(0, 1, cTime);
+}
 /* USER CODE END 0 */
 
 /**
@@ -94,9 +134,11 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_RTC_Init();
+  MX_TIM14_Init();
   /* USER CODE BEGIN 2 */
   TM_HD44780_Init(16, 2);
   TM_HD44780_Puts(0, 0, "Hello Booboo");
+  HAL_TIM_Base_Start_IT(&htim14);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -106,6 +148,57 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	if(BTN_PRESSED(BTN_SET_GPIO_Port, BTN_SET_Pin)) {
+		if(mode == MODE_DISPLAY_CLCOK) {
+			mode = MODE_SET_CLOCK;
+			subMode = SET_HOUR;
+			HAL_TIM_Base_Stop(&htim14);
+			tTime = sTime;
+		}
+		else {
+			if(mode == MODE_SET_CLOCK && subMode < SET_SECONDS) {
+				subMode++;
+			}
+			else {
+				mode = MODE_DISPLAY_CLCOK;
+				subMode = -1;
+				if (HAL_RTC_SetTime(&hrtc, &tTime, RTC_FORMAT_BIN) != HAL_OK)
+				{
+					Error_Handler();
+				}
+				sTime = tTime;
+				HAL_TIM_Base_Start_IT(&htim14);
+			}
+		}
+		switch(subMode) {
+		case SET_HOUR: { TM_HD44780_Puts(0, 0, "Set Hour    "); break; }
+		case SET_MINUTE: { TM_HD44780_Puts(0, 0, "Set Minutes "); break; }
+		case SET_SECONDS: { TM_HD44780_Puts(0, 0, "Set Seconds "); break; }
+		default: { TM_HD44780_Puts(0, 0, "Hello Booboo"); }
+		}
+	}
+	if(BTN_PRESSED(BTN_UP_GPIO_Port, BTN_UP_Pin)) {
+		switch (subMode) {
+		case SET_HOUR: {
+			if((hrtc.Init.HourFormat == RTC_HOURFORMAT_24 && tTime.Hours < 23U) ||
+				(hrtc.Init.HourFormat == RTC_HOURFORMAT_12 && tTime.Hours < 11U)) {
+				tTime.Hours += 1;
+			}
+			break;
+		}
+		case SET_MINUTE: { if(tTime.Minutes < 59) tTime.Minutes += 1; break; }
+		case SET_SECONDS: {	if(tTime.Seconds < 59) tTime.Seconds += 1; break; }
+		}
+		DisplayTime(tTime);
+	}
+	if(BTN_PRESSED(BTN_DOWN_GPIO_Port, BTN_DOWN_Pin)) {
+		switch (subMode) {
+		case SET_HOUR: { if(tTime.Hours > 0) tTime.Hours -= 1; break; }
+		case SET_MINUTE: { if(tTime.Minutes > 0) tTime.Minutes -= 1; break; }
+		case SET_SECONDS: { if(tTime.Seconds > 0) tTime.Seconds -= 1; break; }
+		}
+		DisplayTime(tTime);
+	}
   }
   /* USER CODE END 3 */
 }
@@ -123,9 +216,8 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL4;
@@ -147,7 +239,7 @@ void SystemClock_Config(void)
     Error_Handler();
   }
   PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_RTC;
-  PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
+  PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_HSE_DIV32;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
@@ -166,6 +258,10 @@ static void MX_RTC_Init(void)
 
   /* USER CODE END RTC_Init 0 */
 
+  RTC_TimeTypeDef sTime = {0};
+  RTC_DateTypeDef sDate = {0};
+  RTC_AlarmTypeDef sAlarm = {0};
+
   /* USER CODE BEGIN RTC_Init 1 */
 
   /* USER CODE END RTC_Init 1 */
@@ -174,7 +270,7 @@ static void MX_RTC_Init(void)
   hrtc.Instance = RTC;
   hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
   hrtc.Init.AsynchPrediv = 127;
-  hrtc.Init.SynchPrediv = 255;
+  hrtc.Init.SynchPrediv = 1953;
   hrtc.Init.OutPut = RTC_OUTPUT_DISABLE;
   hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
   hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
@@ -182,9 +278,82 @@ static void MX_RTC_Init(void)
   {
     Error_Handler();
   }
+
+  /* USER CODE BEGIN Check_RTC_BKUP */
+
+  /* USER CODE END Check_RTC_BKUP */
+
+  /** Initialize RTC and set the Time and Date
+  */
+  sTime.Hours = 0;
+  sTime.Minutes = 0;
+  sTime.Seconds = 0;
+  sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
+  sTime.StoreOperation = RTC_STOREOPERATION_RESET;
+  if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sDate.WeekDay = RTC_WEEKDAY_MONDAY;
+  sDate.Month = RTC_MONTH_JANUARY;
+  sDate.Date = 1;
+  sDate.Year = 0;
+
+  if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BIN) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Enable the Alarm A
+  */
+  sAlarm.AlarmTime.Hours = 0;
+  sAlarm.AlarmTime.Minutes = 0;
+  sAlarm.AlarmTime.Seconds = 0;
+  sAlarm.AlarmTime.SubSeconds = 0;
+  sAlarm.AlarmTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
+  sAlarm.AlarmTime.StoreOperation = RTC_STOREOPERATION_RESET;
+  sAlarm.AlarmMask = RTC_ALARMMASK_NONE;
+  sAlarm.AlarmSubSecondMask = RTC_ALARMSUBSECONDMASK_ALL;
+  sAlarm.AlarmDateWeekDaySel = RTC_ALARMDATEWEEKDAYSEL_DATE;
+  sAlarm.AlarmDateWeekDay = 1;
+  sAlarm.Alarm = RTC_ALARM_A;
+  if (HAL_RTC_SetAlarm(&hrtc, &sAlarm, RTC_FORMAT_BIN) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE BEGIN RTC_Init 2 */
 
   /* USER CODE END RTC_Init 2 */
+
+}
+
+/**
+  * @brief TIM14 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM14_Init(void)
+{
+
+  /* USER CODE BEGIN TIM14_Init 0 */
+
+  /* USER CODE END TIM14_Init 0 */
+
+  /* USER CODE BEGIN TIM14_Init 1 */
+
+  /* USER CODE END TIM14_Init 1 */
+  htim14.Instance = TIM14;
+  htim14.Init.Prescaler = 32000;
+  htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim14.Init.Period = 1000;
+  htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim14.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim14) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM14_Init 2 */
+
+  /* USER CODE END TIM14_Init 2 */
 
 }
 
@@ -203,46 +372,37 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, LCD_D7_Pin|LCD_D6_Pin|LCD_D5_Pin|LCD_D4_Pin
-                          |LCD_EN_Pin|LCD_RS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, LED_Pin|LCD_D7_Pin|LCD_D6_Pin|LCD_D5_Pin
+                          |LCD_D4_Pin|LCD_EN_Pin|LCD_RS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(PN2222_GPIO_Port, PN2222_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : BTN_UP_Pin BTN_SET_Pin BTN_DOWN_Pin */
-  GPIO_InitStruct.Pin = BTN_UP_Pin|BTN_SET_Pin|BTN_DOWN_Pin;
+  /*Configure GPIO pins : BTN_DOWN_Pin BTN_SET_Pin BTN_UP_Pin */
+  GPIO_InitStruct.Pin = BTN_DOWN_Pin|BTN_SET_Pin|BTN_UP_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LCD_D7_Pin LCD_D6_Pin LCD_D5_Pin LCD_D4_Pin
-                           LCD_EN_Pin LCD_RS_Pin */
-  GPIO_InitStruct.Pin = LCD_D7_Pin|LCD_D6_Pin|LCD_D5_Pin|LCD_D4_Pin
-                          |LCD_EN_Pin|LCD_RS_Pin;
+  /*Configure GPIO pins : LED_Pin LCD_D7_Pin LCD_D6_Pin LCD_D5_Pin
+                           LCD_D4_Pin LCD_EN_Pin LCD_RS_Pin */
+  GPIO_InitStruct.Pin = LED_Pin|LCD_D7_Pin|LCD_D6_Pin|LCD_D5_Pin
+                          |LCD_D4_Pin|LCD_EN_Pin|LCD_RS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PN2222_Pin */
   GPIO_InitStruct.Pin = PN2222_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
-  HAL_GPIO_Init(PN2222_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PA9 PA10 */
-  GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_10;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF1_USART1;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  HAL_GPIO_Init(PN2222_GPIO_Port, &GPIO_InitStruct);
 
 }
 
 /* USER CODE BEGIN 4 */
-
 /* USER CODE END 4 */
 
 /**
