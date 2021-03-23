@@ -28,12 +28,16 @@
 #include "defines.h"
 #include "tm_stm32_delay.h"
 #include "tm_stm32_hd44780.h"
-
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+typedef struct {
+	uint8_t hour;
+	uint8_t minute;
+	uint8_t duration;
+} Schedule;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -62,14 +66,19 @@
 RTC_HandleTypeDef hrtc;
 
 TIM_HandleTypeDef htim14;
+TIM_HandleTypeDef htim16;
 
 /* USER CODE BEGIN PV */
-char cTime[0x09] = {0x20, 0x20, ':', 0x20, 0x20, ':', 0x20, 0x20, '\0'};
+char cTime[12];
 RTC_TimeTypeDef tTime = {0};
 RTC_TimeTypeDef sTime = {0};
 RTC_DateTypeDef sDate = {0};
 uint8_t mode = 0;
 uint8_t subMode = 0;
+uint8_t onCounter = 0;
+Schedule schedules[] = {{7, 0, 120}, {17, 0, 60}};
+uint8_t scheduleIdx = -1;
+uint8_t scheduleCount = 2;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,9 +86,11 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_RTC_Init(void);
 static void MX_TIM14_Init(void);
+static void MX_TIM16_Init(void);
 /* USER CODE BEGIN PFP */
 extern void TM_HD44780_Init(uint8_t cols, uint8_t rows);
 void DisplayTime(RTC_TimeTypeDef sTime);
+void setNextSchedule();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -93,14 +104,45 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		}
 		DisplayTime(sTime);
 	}
+	if(htim->Instance == TIM16) {
+		if(onCounter <= 0) {
+			HAL_GPIO_WritePin(PN2222_GPIO_Port, PN2222_Pin, 0);
+			HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 0);
+			HAL_TIM_Base_Stop_IT(&htim16);
+		}
+		else {
+			onCounter--;
+		}
+	}
+}
+void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc) {
+	HAL_GPIO_WritePin(PN2222_GPIO_Port, PN2222_Pin, 1);
+	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 1);
+	onCounter = schedules[scheduleIdx].duration;
+	HAL_TIM_Base_Start_IT(&htim16);
+	setNextSchedule();
+}
+void setNextSchedule() {
+	scheduleIdx = (scheduleIdx < scheduleCount) ? scheduleIdx + 1 : 0;
+	HAL_RTC_DeactivateAlarm(&hrtc, RTC_ALARM_A);
+	RTC_AlarmTypeDef sAlarm = {0};
+	sAlarm.AlarmTime.Hours = schedules[scheduleIdx].hour;
+	sAlarm.AlarmTime.Minutes = schedules[scheduleIdx].minute;
+	sAlarm.AlarmTime.Seconds = 0;
+	sAlarm.AlarmTime.SubSeconds = 0;
+	sAlarm.AlarmTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
+	sAlarm.AlarmTime.StoreOperation = RTC_STOREOPERATION_RESET;
+	sAlarm.AlarmMask = RTC_ALARMMASK_DATEWEEKDAY;
+	sAlarm.AlarmSubSecondMask = RTC_ALARMSUBSECONDMASK_ALL;
+	sAlarm.AlarmDateWeekDaySel = RTC_ALARMDATEWEEKDAYSEL_DATE;
+	sAlarm.AlarmDateWeekDay = 1;
+	sAlarm.Alarm = RTC_ALARM_A;
+	if (HAL_RTC_SetAlarm_IT(&hrtc, &sAlarm, RTC_FORMAT_BIN) != HAL_OK) {
+		Error_Handler();
+	}
 }
 void DisplayTime(RTC_TimeTypeDef sTime) {
-	cTime[0] = (((sTime.Hours / 10) % 10) + 0x30);
-	cTime[1] = ((sTime.Hours % 10) + 0x30);
-	cTime[3] = (((sTime.Minutes / 10) % 10) + 0x30);
-	cTime[4] = ((sTime.Minutes % 10) + 0x30);
-	cTime[6] = (((sTime.Seconds / 10) % 10) + 0x30);
-	cTime[7] = ((sTime.Seconds % 10) + 0x30);
+	sprintf(cTime, "%02d:%02d:%02d", sTime.Hours, sTime.Minutes, sTime.Seconds);
 	TM_HD44780_Puts(0, 1, cTime);
 }
 /* USER CODE END 0 */
@@ -135,10 +177,12 @@ int main(void)
   MX_GPIO_Init();
   MX_RTC_Init();
   MX_TIM14_Init();
+  MX_TIM16_Init();
   /* USER CODE BEGIN 2 */
   TM_HD44780_Init(16, 2);
   TM_HD44780_Puts(0, 0, "Hello Booboo");
   HAL_TIM_Base_Start_IT(&htim14);
+  setNextSchedule();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -316,12 +360,11 @@ static void MX_RTC_Init(void)
   sAlarm.AlarmDateWeekDaySel = RTC_ALARMDATEWEEKDAYSEL_DATE;
   sAlarm.AlarmDateWeekDay = 1;
   sAlarm.Alarm = RTC_ALARM_A;
-  if (HAL_RTC_SetAlarm(&hrtc, &sAlarm, RTC_FORMAT_BIN) != HAL_OK)
+  if (HAL_RTC_SetAlarm_IT(&hrtc, &sAlarm, RTC_FORMAT_BIN) != HAL_OK)
   {
     Error_Handler();
   }
   /* USER CODE BEGIN RTC_Init 2 */
-
   /* USER CODE END RTC_Init 2 */
 
 }
@@ -354,6 +397,38 @@ static void MX_TIM14_Init(void)
   /* USER CODE BEGIN TIM14_Init 2 */
 
   /* USER CODE END TIM14_Init 2 */
+
+}
+
+/**
+  * @brief TIM16 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM16_Init(void)
+{
+
+  /* USER CODE BEGIN TIM16_Init 0 */
+
+  /* USER CODE END TIM16_Init 0 */
+
+  /* USER CODE BEGIN TIM16_Init 1 */
+
+  /* USER CODE END TIM16_Init 1 */
+  htim16.Instance = TIM16;
+  htim16.Init.Prescaler = 32000;
+  htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim16.Init.Period = 1000;
+  htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim16.Init.RepetitionCounter = 0;
+  htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM16_Init 2 */
+
+  /* USER CODE END TIM16_Init 2 */
 
 }
 
