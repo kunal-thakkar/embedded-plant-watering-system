@@ -2,30 +2,13 @@
 #define		__LCDTXT_H
 
 #include "stm8s.h"
+#include "main.h"
 
 /*------------- Define LCD Use -----------------*/
 /*Note: Comment which not use */
 
 #define LCD16xN //For lcd16x2 or lcd16x4
 //#define LCD20xN //For lcd20x4
-
-#define LCD_RS_PORT 		GPIOD
-#define LCD_RS_PIN			GPIO_PIN_2
-
-#define LCD_EN_PORT 		GPIOC
-#define LCD_EN_PIN			GPIO_PIN_7
-
-#define LCD_D4_PORT 		GPIOC
-#define LCD_D4_PIN			GPIO_PIN_6
-
-#define LCD_D5_PORT 		GPIOC
-#define LCD_D5_PIN			GPIO_PIN_5
-
-#define LCD_D6_PORT 		GPIOC
-#define LCD_D6_PIN			GPIO_PIN_4
-
-#define LCD_D7_PORT 		GPIOC
-#define LCD_D7_PIN			GPIO_PIN_3
 
 /*------------ Declaring Private Macro -----------------*/
 

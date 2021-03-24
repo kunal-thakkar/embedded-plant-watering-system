@@ -2,23 +2,11 @@
  * 
  * Copyright (c) 2002-2005 STMicroelectronics
  */
-
+#include "main.h"
 #include "stm8s.h"
 #include "lcd.h"
 #include "stm8s_delay.h"
 #include "ds1307.h"
-
-#define BUTTON_SET_PORT	GPIOD
-#define BUTTON_SET_PIN	GPIO_PIN_3
-
-#define BUTTON_UP_PORT	GPIOD
-#define BUTTON_UP_PIN		GPIO_PIN_5
-
-#define BUTTON_DW_PORT	GPIOD
-#define BUTTON_DW_PIN		GPIO_PIN_6
-
-#define PN2222_PORT					GPIOD
-#define PN2222_PIN					GPIO_PIN_4
 
 struct
 {
@@ -67,8 +55,8 @@ void GPIO_setup(void) {
 	GPIO_Init(BUTTON_UP_PORT, BUTTON_UP_PIN, GPIO_MODE_IN_PU_NO_IT);
 	GPIO_Init(BUTTON_DW_PORT, BUTTON_DW_PIN, GPIO_MODE_IN_PU_NO_IT);
 	// Pin for I2C communications
-	GPIO_Init(GPIOB, GPIO_PIN_4, GPIO_MODE_OUT_OD_HIZ_FAST);
-	GPIO_Init(GPIOB, GPIO_PIN_5, GPIO_MODE_OUT_OD_HIZ_FAST);
+	GPIO_Init(I2C_PORT, I2C_SCL_PIN, GPIO_MODE_OUT_OD_HIZ_FAST);
+	GPIO_Init(I2C_PORT, I2C_SDA_PIN, GPIO_MODE_OUT_OD_HIZ_FAST);
 }
 
 void show_value(unsigned char x_pos, unsigned char y_pos, unsigned char value)
