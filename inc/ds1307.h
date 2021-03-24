@@ -1,5 +1,4 @@
-#include "SW_I2C.h"
-
+#include "stm8s_i2c.h"
 
 #define sec_reg                     0x00
 #define min_reg                     0x01

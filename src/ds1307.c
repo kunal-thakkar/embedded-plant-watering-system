@@ -12,37 +12,58 @@ extern struct Time
    unsigned char yr;
 }time;
 
+extern void delay_ms(unsigned int  value);
+
 void DS1307_init(void)
 {
-	SW_I2C_init();
-    DS1307_write(control_reg, 0x00);
+  DS1307_write(control_reg, 0x00);
 }
 
 
 unsigned char DS1307_read(unsigned char address)
 {
-    unsigned char value = 0x00;
+	unsigned char value = 0x00;
 
-    SW_I2C_start();
-    SW_I2C_write(DS1307_WR);
-    SW_I2C_write(address);
+	I2C_GenerateSTART(ENABLE);
+	while(!I2C_CheckEvent(I2C_EVENT_MASTER_MODE_SELECT));
+	
+	I2C_Send7bitAddress(DS1307_WR, I2C_DIRECTION_TX); 
+	while(!I2C_CheckEvent(I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED));
+	
+	I2C_SendData(address); 
+	while(!I2C_CheckEvent(I2C_EVENT_MASTER_BYTE_TRANSMITTED));
 
-    SW_I2C_start();
-    SW_I2C_write(DS1307_RD);
-    value = SW_I2C_read(I2C_NACK);
-    SW_I2C_stop();
-    
-    return value;
+	I2C_GenerateSTART(ENABLE);
+	while(!I2C_CheckEvent(I2C_EVENT_MASTER_MODE_SELECT));
+
+	I2C_Send7bitAddress(DS1307_RD, I2C_DIRECTION_RX);
+	while(!I2C_CheckEvent(I2C_EVENT_MASTER_RECEIVER_MODE_SELECTED));
+	
+	delay_ms(10);
+	while(!I2C_CheckEvent(I2C_EVENT_MASTER_BYTE_RECEIVED));
+	
+	value = I2C_ReceiveData();
+	I2C_AcknowledgeConfig(I2C_ACK_NONE);
+	I2C_GenerateSTOP(ENABLE);   
+	return value;
 }
 
 
 void DS1307_write(unsigned char address, unsigned char value)
 {
-    SW_I2C_start();
-    SW_I2C_write(DS1307_WR);
-    SW_I2C_write(address);
-    SW_I2C_write(value);
-    SW_I2C_stop();
+	I2C_GenerateSTART(ENABLE);
+	while(!I2C_CheckEvent(I2C_EVENT_MASTER_MODE_SELECT));
+
+	I2C_Send7bitAddress(DS1307_WR, I2C_DIRECTION_TX); 
+	while(!I2C_CheckEvent(I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED));
+	
+	I2C_SendData(address); 
+	while(!I2C_CheckEvent(I2C_EVENT_MASTER_BYTE_TRANSMITTED));
+
+	I2C_SendData(value);
+	while(!I2C_CheckEvent(I2C_EVENT_MASTER_BYTE_TRANSMITTED));
+
+	I2C_GenerateSTOP(ENABLE);   
 }
 
 unsigned char bcd_to_decimal(unsigned char value)

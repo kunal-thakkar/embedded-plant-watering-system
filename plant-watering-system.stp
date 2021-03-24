@@ -390,11 +390,6 @@ Next=Root.Source Files.src\stm8s_wwdg.c
 [Root.Source Files.src\stm8s_wwdg.c]
 ElemType=File
 PathName=src\stm8s_wwdg.c
-Next=Root.Source Files.src\sw_i2c.c
-
-[Root.Source Files.src\sw_i2c.c]
-ElemType=File
-PathName=src\sw_i2c.c
 Next=Root.Source Files.stm8_interrupt_vector.c
 
 [Root.Source Files.stm8_interrupt_vector.c]
@@ -582,8 +577,3 @@ Next=Root.Include Files.inc\stm8s_wwdg.h
 [Root.Include Files.inc\stm8s_wwdg.h]
 ElemType=File
 PathName=inc\stm8s_wwdg.h
-Next=Root.Include Files.inc\sw_i2c.h
-
-[Root.Include Files.inc\sw_i2c.h]
-ElemType=File
-PathName=inc\sw_i2c.h

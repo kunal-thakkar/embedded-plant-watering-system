@@ -7,7 +7,6 @@
 #include "lcd.h"
 #include "stm8s_delay.h"
 #include "ds1307.h"
-#include "SW_I2C.h"
 
 #define BUTTON_SET_PORT	GPIOD
 #define BUTTON_SET_PIN	GPIO_PIN_3
@@ -38,13 +37,17 @@ struct
 	unsigned char minute;
 	unsigned char duration;
 } schedule = { 0x0A, 0x00, 0x3B };
-char ch[0x09] = {0x20, 0x20, ':', 0x20, 0x20, ':', 0x20, 0x20, '\0'};
+
+char ch[0x09] = {0x20, 0x20, ':', 0x20, 0x20, ':', 0x20, 0x20, '\0'};
 
 bool set = FALSE;
 bool motor_on = FALSE;
 
 unsigned char menu = 0;
 unsigned char data_value;
+
+void clock_setup(void);
+void I2C_setup(void);
 
 void GPIO_setup(void) { 
 	/* The following lines deinitialize the GPIOs we used. 
@@ -63,6 +66,9 @@ void GPIO_setup(void) {
 	GPIO_Init(BUTTON_SET_PORT, BUTTON_SET_PIN, GPIO_MODE_IN_PU_NO_IT);
 	GPIO_Init(BUTTON_UP_PORT, BUTTON_UP_PIN, GPIO_MODE_IN_PU_NO_IT);
 	GPIO_Init(BUTTON_DW_PORT, BUTTON_DW_PIN, GPIO_MODE_IN_PU_NO_IT);
+	// Pin for I2C communications
+	GPIO_Init(GPIOB, GPIO_PIN_4, GPIO_MODE_OUT_OD_HIZ_FAST);
+	GPIO_Init(GPIOB, GPIO_PIN_5, GPIO_MODE_OUT_OD_HIZ_FAST);
 }
 
 void show_value(unsigned char x_pos, unsigned char y_pos, unsigned char value)
@@ -126,12 +132,14 @@ void setup_time(void)
 }
 
 main() {
+	clock_setup();
 	GPIO_setup(); 
+	I2C_setup();
 	DS1307_init();
 	set_freq(0x10);
 	lcd_init();
 	lcd_puts(0,0,(int8_t*)"Hello Booboo");
-		
+
 	while(1)
 	{
 		if(GPIO_ReadInputPin(BUTTON_SET_PORT, BUTTON_SET_PIN) == FALSE)
@@ -170,4 +178,42 @@ main() {
 			motor_on = FALSE;
 		}
 	};
+}
+
+void clock_setup(void)
+{
+	CLK_DeInit();
+	
+	CLK_HSECmd(DISABLE);
+	CLK_LSICmd(DISABLE);
+	CLK_HSICmd(ENABLE);
+	while(CLK_GetFlagStatus(CLK_FLAG_HSIRDY) == FALSE);
+	
+	CLK_ClockSwitchCmd(ENABLE);
+	CLK_HSIPrescalerConfig(CLK_PRESCALER_HSIDIV8);
+	CLK_SYSCLKConfig(CLK_PRESCALER_CPUDIV2);
+	
+	CLK_ClockSwitchConfig(CLK_SWITCHMODE_AUTO, CLK_SOURCE_HSI, 
+	DISABLE, CLK_CURRENTCLOCKSTATE_ENABLE);
+	
+	CLK_PeripheralClockConfig(CLK_PERIPHERAL_SPI, DISABLE);
+	CLK_PeripheralClockConfig(CLK_PERIPHERAL_I2C, ENABLE);
+	CLK_PeripheralClockConfig(CLK_PERIPHERAL_ADC, DISABLE);
+	CLK_PeripheralClockConfig(CLK_PERIPHERAL_AWU, DISABLE);
+	CLK_PeripheralClockConfig(CLK_PERIPHERAL_UART1, DISABLE);
+	CLK_PeripheralClockConfig(CLK_PERIPHERAL_TIMER1, DISABLE);
+	CLK_PeripheralClockConfig(CLK_PERIPHERAL_TIMER2, DISABLE);
+	CLK_PeripheralClockConfig(CLK_PERIPHERAL_TIMER4, DISABLE);
+}
+
+void I2C_setup(void)
+{
+	I2C_DeInit();
+	I2C_Init(100000, 
+				  DS1307_addr, 
+				  I2C_DUTYCYCLE_2, 
+				  I2C_ACK_CURR, 
+				  I2C_ADDMODE_7BIT, 
+				  (CLK_GetClockFreq() / 1000000));
+	I2C_Cmd(ENABLE);
 }
