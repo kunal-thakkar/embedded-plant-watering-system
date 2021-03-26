@@ -1,6 +1,8 @@
 #ifndef		__MAIN_H
 #define		__MAIN_H
 
+#include "stm8s.h"
+
 #define I2C_PORT			GPIOB
 #define I2C_SCL_PIN			GPIO_PIN_4
 #define I2C_SDA_PIN			GPIO_PIN_5
@@ -39,4 +41,16 @@
 #define LCD_D7_PORT 		GPIOC
 #define LCD_D7_PIN			GPIO_PIN_3
 
+
+
+typedef struct 
+{
+	uint8_t hour;
+	uint8_t minute;
+	uint8_t duration;
+} Schedule;
+
+@far @interrupt void TIM2_UPD_IRQHandler(void);
+@far @interrupt void TIM4_UPD_IRQHandler(void);
+void _stext(void); /* RESET startup routine */
 #endif

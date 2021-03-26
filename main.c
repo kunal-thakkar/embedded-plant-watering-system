@@ -2,40 +2,33 @@
  * 
  * Copyright (c) 2002-2005 STMicroelectronics
  */
-#include "main.h"
 #include "stm8s.h"
+#include "main.h"
 #include "lcd.h"
 #include "stm8s_delay.h"
 #include "ds1307.h"
 
-struct
-{
- unsigned char s;
- unsigned char m;
- unsigned char h;
- unsigned char dy;
- unsigned char dt;
- unsigned char mt;
- unsigned char yr;
-}time;
-
-struct
-{
-	unsigned char hour;
-	unsigned char minute;
-	unsigned char duration;
-} schedule = { 0x0A, 0x00, 0x3B };
+Time time;
+Schedule schedules[] = {{7, 0, 120}, {17, 0, 60}};
+int16_t alarm = 0;
+int16_t duration;
+int32_t sec_ticks = 0;
+int8_t schedule_idx = -1;
+int8_t schedule_count = 2;
+#define SEC_IN_HOUR 	3600
+#define SEC_IN_MINUTE	60
 
 char ch[0x09] = {0x20, 0x20, ':', 0x20, 0x20, ':', 0x20, 0x20, '\0'};
-
 bool set = FALSE;
-bool motor_on = FALSE;
-
-unsigned char menu = 0;
-unsigned char data_value;
+int8_t menu = 0;
+int8_t data_value;
 
 void clock_setup(void);
 void I2C_setup(void);
+void TIM2_setup(void);
+void TIM4_setup(void);
+void update_time(void);
+void set_next_schedule(void);
 
 void GPIO_setup(void) { 
 	/* The following lines deinitialize the GPIOs we used. 
@@ -59,7 +52,7 @@ void GPIO_setup(void) {
 	GPIO_Init(I2C_PORT, I2C_SDA_PIN, GPIO_MODE_OUT_OD_HIZ_FAST);
 }
 
-void show_value(unsigned char x_pos, unsigned char y_pos, unsigned char value)
+void show_value(uint8_t x_pos, uint8_t y_pos, uint8_t value)
 {
 	char ch[0x03] = {0x20, 0x20, '\0'};
 	ch[0] = (((value / 10) % 10) + 0x30);
@@ -76,10 +69,9 @@ void display_time(void)
 	ch[6] = (((time.s / 10) % 10) + 0x30);
 	ch[7] = ((time.s % 10) + 0x30);
 	lcd_puts(4, 1, (int8_t*)ch);
-	delay_ms(100);
 }
 
-unsigned char adjust(unsigned char x_pos, unsigned char y_pos, signed char value_max, signed char value_min, signed char value)
+uint8_t adjust(uint8_t x_pos, uint8_t y_pos, signed char value_max, signed char value_min, signed char value)
 {
 	if(GPIO_ReadInputPin(BUTTON_UP_PORT, BUTTON_UP_PIN) == FALSE)
 	{
@@ -123,11 +115,15 @@ main() {
 	clock_setup();
 	GPIO_setup(); 
 	I2C_setup();
-	DS1307_init();
-	set_freq(0x10);
+	TIM2_setup();
+	TIM4_setup();
+	set_next_schedule();
 	lcd_init();
 	lcd_puts(0,0,(int8_t*)"Hello Booboo");
-
+	DS1307_init();
+	get_time();
+	sec_ticks = ((((time.h * 60) + time.m) * 60) + time.s);
+	enableInterrupts();
 	while(1)
 	{
 		if(GPIO_ReadInputPin(BUTTON_SET_PORT, BUTTON_SET_PIN) == FALSE)
@@ -137,11 +133,16 @@ main() {
 			if (menu >= 3) {
 				menu = -1;
 				set_time();
+				sec_ticks = (((time.h * 60) + time.m) * 60) + time.s;
 				set = FALSE;
 				lcd_off_cursor();
+				delay_ms(100);
+				TIM2_Cmd(ENABLE);
 			}
 			else if (menu != -1)
 			{
+				TIM2_Cmd(DISABLE);
+				delay_ms(100);
 				set = TRUE;
 				lcd_blink_cursor();
 			}
@@ -150,21 +151,6 @@ main() {
 		{
 			setup_time();
 		}
-		else
-		{
-			get_time();
-			display_time();
-		}
-		if(motor_on == FALSE && time.h == schedule.hour && time.m == schedule.minute && time.s == 0)
-		{
-			PIN_HIGH(PN2222_PORT, PN2222_PIN);
-			motor_on = TRUE;
-		}
-		else if (motor_on == TRUE && time.s >= schedule.duration)
-		{
-			PIN_LOW(PN2222_PORT, PN2222_PIN);
-			motor_on = FALSE;
-		}
 	};
 }
 
@@ -172,16 +158,15 @@ void clock_setup(void)
 {
 	CLK_DeInit();
 	
-	CLK_HSECmd(DISABLE);
+	CLK_HSECmd(ENABLE);
 	CLK_LSICmd(DISABLE);
-	CLK_HSICmd(ENABLE);
+	CLK_HSICmd(DISABLE);
 	while(CLK_GetFlagStatus(CLK_FLAG_HSIRDY) == FALSE);
 	
 	CLK_ClockSwitchCmd(ENABLE);
-	CLK_HSIPrescalerConfig(CLK_PRESCALER_HSIDIV8);
-	CLK_SYSCLKConfig(CLK_PRESCALER_CPUDIV2);
+	CLK_SYSCLKConfig(CLK_PRESCALER_CPUDIV1);
 	
-	CLK_ClockSwitchConfig(CLK_SWITCHMODE_AUTO, CLK_SOURCE_HSI, 
+	CLK_ClockSwitchConfig(CLK_SWITCHMODE_AUTO, CLK_SOURCE_HSE, 
 	DISABLE, CLK_CURRENTCLOCKSTATE_ENABLE);
 	
 	CLK_PeripheralClockConfig(CLK_PERIPHERAL_SPI, DISABLE);
@@ -190,8 +175,8 @@ void clock_setup(void)
 	CLK_PeripheralClockConfig(CLK_PERIPHERAL_AWU, DISABLE);
 	CLK_PeripheralClockConfig(CLK_PERIPHERAL_UART1, DISABLE);
 	CLK_PeripheralClockConfig(CLK_PERIPHERAL_TIMER1, DISABLE);
-	CLK_PeripheralClockConfig(CLK_PERIPHERAL_TIMER2, DISABLE);
-	CLK_PeripheralClockConfig(CLK_PERIPHERAL_TIMER4, DISABLE);
+	CLK_PeripheralClockConfig(CLK_PERIPHERAL_TIMER2, ENABLE);
+	CLK_PeripheralClockConfig(CLK_PERIPHERAL_TIMER4, ENABLE);
 }
 
 void I2C_setup(void)
@@ -204,4 +189,62 @@ void I2C_setup(void)
 				  I2C_ADDMODE_7BIT, 
 				  (CLK_GetClockFreq() / 1000000));
 	I2C_Cmd(ENABLE);
+}
+
+void TIM2_setup(void)
+{	
+	TIM2_DeInit();
+	TIM2_TimeBaseInit(TIM2_PRESCALER_512, 15625);
+	TIM2_ITConfig(TIM2_IT_UPDATE, ENABLE);
+	TIM2_Cmd(ENABLE);
+}
+
+void TIM4_setup(void)
+{	
+	TIM4_DeInit();
+	TIM4_TimeBaseInit(TIM4_PRESCALER_128, 250);	
+	TIM4_ITConfig(TIM4_IT_UPDATE, ENABLE);
+}
+
+void TIM2_UPD_IRQHandler(void) {
+	TIM2_ClearFlag(TIM2_FLAG_UPDATE);	
+	TIM2_ClearITPendingBit(TIM4_IT_UPDATE);
+	sec_ticks++;
+	if(sec_ticks > 86399) {
+		sec_ticks = 0;
+	}
+	if(alarm == sec_ticks) {
+		GPIO_WriteHigh(PN2222_PORT, PN2222_PIN);
+		TIM4_Cmd(ENABLE);
+	}
+	update_time();
+	if(!set) {
+		display_time();
+	}
+}
+
+void TIM4_UPD_IRQHandler(void) {
+	duration--;
+	if(duration == 0) {
+		GPIO_WriteLow(PN2222_PORT, PN2222_PIN);
+		TIM4_Cmd(DISABLE);
+		set_next_schedule();
+	}
+	TIM4_ClearFlag(TIM4_FLAG_UPDATE);	
+	TIM4_ClearITPendingBit(TIM4_IT_UPDATE);
+}
+
+void update_time(void) {
+	int32_t _sec_ticks = sec_ticks;
+	time.s = _sec_ticks % 60;
+	_sec_ticks /= 60;
+	time.m = _sec_ticks % 60;
+	_sec_ticks /= 60;
+	time.h = _sec_ticks;
+}
+
+void set_next_schedule(void) {
+	schedule_idx = (schedule_idx < schedule_count) ? schedule_idx + 1 : 0;
+	alarm = ((schedules[schedule_idx].hour * 60) + schedules[schedule_idx].minute) * 60;
+	duration = schedules[schedule_idx].duration * 250;
 }

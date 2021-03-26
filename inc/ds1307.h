@@ -18,11 +18,22 @@
 #define FREQ_8_192_KHz							0x12;
 #define FREQ_32_768_KHz							0x13;
 
+typedef struct
+{
+  int32_t s;
+  int32_t m;
+  int32_t h;
+  int32_t dy;
+  int32_t dt;
+  int32_t mt;
+  int32_t yr;
+} Time;
+
 void DS1307_init(void);
-unsigned char DS1307_read(unsigned char address);
-void DS1307_write(unsigned char address, unsigned char value);
-unsigned char bcd_to_decimal(unsigned char value);
-unsigned char decimal_to_bcd(unsigned char value);
+int8_t DS1307_read(int8_t address);
+void DS1307_write(int8_t address, int8_t value);
+int8_t bcd_to_decimal(int8_t value);
+int8_t decimal_to_bcd(int8_t value);
 void get_time(void);
 void set_time(void);
 void set_freq(char data);

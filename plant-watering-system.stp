@@ -399,7 +399,7 @@ PathName=stm8_interrupt_vector.c
 [Root.Include Files]
 ElemType=Folder
 PathName=Include Files
-Child=Root.Include Files.inc\ds1307.h
+Child=Root.Include Files.inc\main.h
 Config.0=Root.Include Files.Config.0
 Config.1=Root.Include Files.Config.1
 
@@ -468,6 +468,11 @@ String.3.0=
 String.4.0=
 String.5.0=
 String.6.0=2020,12,21,11,20,44
+
+[Root.Include Files.inc\main.h]
+ElemType=File
+PathName=inc\main.h
+Next=Root.Include Files.inc\ds1307.h
 
 [Root.Include Files.inc\ds1307.h]
 ElemType=File
